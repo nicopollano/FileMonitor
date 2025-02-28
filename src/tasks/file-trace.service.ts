@@ -22,13 +22,13 @@ export class FileTraceService implements OnModuleInit{
     }
     
     startWatching(){
-        this.watcher = chokidar.watch("./pr", { persistent: true })
+        this.watcher = chokidar.watch(process.env.ROUTE as string, { persistent: true })
 
-        this.watcher.on("add", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath, "creado")));
-        this.watcher.on("addDir", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath, "creado")));
-        this.watcher.on("unlink", (filePath) => this.emitter.emit("process", () => this.onDel(filePath, "borrado")));
-        this.watcher.on("unlinkDir", (filePath) => this.emitter.emit("process", () => this.onDel(filePath, "borrado")));
-        this.watcher.on("change", filePath => this.emitter.emit("process", () => this.onChange(filePath, "creado")));
+        this.watcher.on("add", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
+        this.watcher.on("addDir", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
+        this.watcher.on("unlink", (filePath) => this.emitter.emit("process", () => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
+        this.watcher.on("unlinkDir", (filePath) => this.emitter.emit("process", () => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
+        this.watcher.on("change", filePath => this.emitter.emit("process", () => this.onChange(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
 
         this.emitter.on("process", async (task: ()=> Promise<void>) =>{
             this.eventChain = this.eventChain.then(() => task()).catch(console.error);
@@ -37,8 +37,8 @@ export class FileTraceService implements OnModuleInit{
 
     async onNewFile(filePath: string, eventType: string){
         return new Promise((res, rej)=>{
-            fs.stat(filePath, async (err, stat)=>{
-                filePath = "/" + filePath;
+            fs.stat(`${process.env.ROUTE}/${filePath}`, async (err, stat)=>{
+                filePath = filePath;
                 
                 const archiveExists = await this.fatService.exists(filePath);
                 console.log(`Nuevo archivo[${filePath}]: ${stat.isDirectory() ? "Carpeta" : "Archivo"}${archiveExists ? " Old" : " NEW"}`);
@@ -56,7 +56,7 @@ export class FileTraceService implements OnModuleInit{
     }
 
     async onDel(filePath: string, eventType: string){
-        filePath = "/" + filePath;
+        filePath = filePath;
         
         const archiveExists = await this.fatService.exists(filePath);
         console.log(`Eliminando archivo[${filePath}]: ${archiveExists?.isFolder ? "Carpeta" : "Archivo"}${archiveExists ? " LOCATED" : ""}`);
@@ -69,14 +69,14 @@ export class FileTraceService implements OnModuleInit{
 
 
     onChange(filePath: string, eventType: string){
-        fs.stat(filePath, async (err, stat)=>{
-            filePath = "/" + filePath;
+        fs.stat(`${process.env.ROUTE}/${filePath}`, async (err, stat)=>{
+            filePath = filePath;
             
             const archiveExists = await this.fatService.exists(filePath);
-            console.log(`Edicion archivo[${filePath}]: ${stat.isDirectory() ? "Carpeta" : "Archivo"}${archiveExists ? " Old" : ""}`);
+            console.log(`Edicion archivo[${filePath}]:${archiveExists ? " Old" : ""}`);
             if(!archiveExists) return;
 
-            await this.fatService.changeArchive(filePath);
+            await this.fatService.changeArchive(filePath, stat.size);
 
         });
     }

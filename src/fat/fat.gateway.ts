@@ -20,9 +20,13 @@ export class FatGateway implements OnModuleInit {
 
     @SubscribeMessage("get-folder")
     async getFolder(@MessageBody() data: string,@ConnectedSocket() client: Socket){
+        data = data.replaceAll(process.env.ROUTE as string, "");
+        if(data[data.length-1] == "/") data = data.substring(0, data.length-1);
         console.log("GET-FOLDER: ", data);
         const archive = await this.fatService.locate(data);
         client.emit('private', archive);
+
+        return archive;
     }
 
     async broadcastEvent(event: string){

@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Fat } from "./entities/fat.entity";
 import { Like, Repository } from "typeorm";
 import { FatGateway } from "./fat.gateway";
+import * as fs from 'fs'
 
 @Injectable()
 export class FatService{
@@ -33,8 +34,9 @@ export class FatService{
         const folder = await this.locate(fullpath, true);
 
         if(!folder && !isRootFolder) return;
-        this.fatGateway.broadcastEvent("New-Archive");
-        return await this.createArchive(fullpath, folder, name, size, isFolder);
+        const new_archive = await this.createArchive(fullpath, folder, name, size, isFolder);
+        this.fatGateway.broadcastEvent("New-Archive:" + fullpath);
+        return new_archive;
     }
 
     private async findOneByPath(path: string){
@@ -82,12 +84,13 @@ export class FatService{
         return await this.fatRepository.save(archive);
     }
 
-    async changeArchive(fullpath: string){
+    async changeArchive(fullpath: string, size){
         const archive = await this.locate(fullpath);
 
         if(!archive) return false;
 
         archive.date_modified = new Date(Date.now());
+        archive.size = size;
 
         this.fatGateway.broadcastEvent("Change-Archive");
 
