@@ -104,5 +104,40 @@ export class FatService{
 
     async getTotalFrom(fullpath: string){
         const archives = await this.locate(fullpath);
+
+        if(!archives) return "Not found";
+
+        const total = await this.getTotalTree(archives);
+        
+        return total;
+    }
+
+    async getContent(archive: Fat){
+        const _archive = await this.fatRepository.findOne({
+            where:{
+                id: archive.id
+            },
+            relations: ['content']
+        });
+
+        if(!_archive) return null;
+
+        return _archive.content;
+    }
+
+    async getTotalTree(archive: Fat): Promise<number>{
+        const content = await this.getContent(archive);
+        if(!content) return 0;
+
+        let totalSize = 0;
+        for(const _archive of content){
+            if(!_archive.isFolder) {
+                totalSize += Number(_archive.size);
+                continue;
+            }
+            totalSize += await this.getTotalTree(_archive);
+        }
+
+        return totalSize;
     }
 }
