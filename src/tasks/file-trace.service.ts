@@ -43,6 +43,7 @@ export class FileTraceService implements OnModuleInit{
                 const archiveExists = await this.fatService.exists(filePath);
                 console.log(`Nuevo archivo[${filePath}]: ${stat.isDirectory() ? "Carpeta" : "Archivo"}${archiveExists ? " Old" : " NEW"}`);
                 if(archiveExists) {
+                    await this.fatService.controlSize(filePath, stat.size);
                     res(false);
                     return;
                 }

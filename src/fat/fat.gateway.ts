@@ -33,7 +33,7 @@ export class FatGateway implements OnModuleInit {
     async getTotal(@MessageBody() path: string, @ConnectedSocket() client: Socket){
         path = path.replaceAll(process.env.ROUTE as string, "");
         if(path[path.length-1] == "/") path = path.substring(0, path.length-1);
-        console.log("GET-FOLDER: ", path);
+        console.log("GET-TOTAL-SIZE: ", path);
 
         const total = await this.fatService.getTotalFrom(path);
         

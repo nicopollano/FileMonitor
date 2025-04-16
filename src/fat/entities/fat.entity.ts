@@ -20,8 +20,11 @@ export class Fat {
     @Column()
     isFolder: boolean;
 
-    @Column({type:"bigint"})
+    @Column({type:"bigint", default: 0 })
     size: number;
+
+    @Column({type:"bigint", default: 0 })
+    totalSize: number;
 
     @ManyToOne(()=> Fat, fat => fat.content, { nullable: true })
     @JoinColumn()

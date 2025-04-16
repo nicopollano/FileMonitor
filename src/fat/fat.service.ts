@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Fat } from "./entities/fat.entity";
 import { Like, Repository } from "typeorm";
@@ -6,11 +6,16 @@ import { FatGateway } from "./fat.gateway";
 import * as fs from 'fs'
 
 @Injectable()
-export class FatService{
+export class FatService implements OnModuleInit{
     constructor(
         @InjectRepository(Fat) private fatRepository : Repository<Fat>,
         private fatGateway: FatGateway,
     ){}
+
+    async onModuleInit() {
+        await this.fatRepository.query('UPDATE public.fat SET "totalSize" = 0');
+        console.log("✅ TotalSize reseteado al iniciar el módulo");
+    }
 
     async locate(path: string, descarte_last: boolean = false){
         const folders = path.substring(1).split("/");
@@ -40,7 +45,7 @@ export class FatService{
     }
 
     private async findOneByPath(path: string){
-        const archive = await this.fatRepository.findOne({ where: { full_path: path }, relations: ['content']})
+        const archive = await this.fatRepository.findOne({ where: { full_path: path }, relations: ['content', 'previous']})
         if(!archive) return null;
         return archive;
     }
@@ -54,19 +59,26 @@ export class FatService{
         archive.isFolder = isFolder;
         archive.size = size;
         archive.name = name;
-        previous ?  archive.previous = previous : "";
 
-        return await this.fatRepository.save(archive);
+        const archive_created = await this.fatRepository.save(archive); 
+
+        if(previous){
+            archive_created.previous = previous;
+            await this.fatRepository.save(archive_created);
+            await this.increaseSize(archive_created.id, size);
+        }
     }
 
     async deleteArchive(fullpath: string){
-        const folder = await this.locate(fullpath);
+        const archive = await this.locate(fullpath);
 
-        if(!folder) return false;
+        if(!archive) return false;
+
+        await this.decreaseSize(archive.id, archive.totalSize);
 
         this.fatGateway.broadcastEvent("Delete-Archive");
 
-        return await this.fatRepository.remove(folder);
+        return await this.fatRepository.remove(archive);
     }
 
     async moveArchive(fullpath: string, to: string){
@@ -77,7 +89,15 @@ export class FatService{
         if(!to_archive) return;
         
         archive.full_path = `${to}/${archive.name}`;
+        
+        const temp = archive.totalSize;
+
+        await this.decreaseSize(archive.id, temp);
+
+        await this.fatRepository.save(archive.previous);
+
         archive.previous = to_archive;
+        await this.increaseSize(archive.id, archive.size);
 
         this.fatGateway.broadcastEvent("Move-Archive");
 
@@ -90,8 +110,16 @@ export class FatService{
         if(!archive) return false;
 
         archive.date_modified = new Date(Date.now());
-        archive.size = size;
 
+        const temp = archive.size;
+
+        await this.decreaseSize(archive.id, temp)
+        await this.increaseSize(archive.id, size);
+
+        await this.fatRepository.save(archive.previous);
+        
+        archive.size = size;
+        
         this.fatGateway.broadcastEvent("Change-Archive");
 
         return await this.fatRepository.save(archive);
@@ -102,12 +130,26 @@ export class FatService{
         return archive;
     }
 
+    async controlSize(path: string, size: number){
+        const archive = await this.locate(path);
+
+        if(!archive) return;
+
+        if(archive.totalSize != size){
+            if(archive.totalSize > 0) await this.decreaseSize(archive.id, archive.size);
+            const archive_updated = await this.increaseSize(archive.id, size);
+            if(!archive_updated) return;
+            archive_updated.size = size;
+            await this.fatRepository.save(archive_updated);
+        } 
+    }
+
     async getTotalFrom(fullpath: string){
         const archives = await this.locate(fullpath);
 
         if(!archives) return "Not found";
 
-        const total = await this.getTotalTree(archives);
+        const total = archives.totalSize; //await this.getTotalTree(archives);
         
         return total;
     }
@@ -139,5 +181,40 @@ export class FatService{
         }
 
         return totalSize;
+    }
+
+    async increaseSize(archiveid: number, size: number){
+        const archive = await this.fatRepository.findOne({
+            where: {
+                id: archiveid
+            },
+            relations: ['previous']
+        });
+
+        if(!archive) return null;
+
+        isNaN(archive.totalSize) ? archive.totalSize = Number(size) : archive.totalSize = Number(archive.totalSize) + Number(size);
+        if(archive.previous)
+            await this.increaseSize(archive.previous.id, size);  
+
+        await this.fatRepository.save(archive);
+
+        return archive;
+    }
+
+    async decreaseSize(archiveid: number, size: number){
+        const archive = await this.fatRepository.findOne({
+            where: {
+                id: archiveid
+            },
+            relations: ['previous']
+        });
+        if(!archive) return null;
+
+        isNaN(archive.totalSize) ? archive.totalSize = Number(size) : archive.totalSize = Number(archive.totalSize) - Number(size);
+        if(archive.previous)
+            await this.decreaseSize(archive.previous.id, size);
+
+        await this.fatRepository.save(archive);
     }
 }
