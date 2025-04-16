@@ -13,6 +13,10 @@ export class FileTraceService implements OnModuleInit{
     private emitter = new EventEmitter();
     private eventChain = Promise.resolve();
 
+    private maxThreads = Number(process.env.MAX_THREADS);
+    private activeThreadCount = 0;
+    private threadQueue: (()=> Promise<any>)[] = [];
+    
     constructor(
         private fatService : FatService,
     ){}
@@ -24,15 +28,39 @@ export class FileTraceService implements OnModuleInit{
     startWatching(){
         this.watcher = chokidar.watch(process.env.ROUTE as string, { persistent: true })
 
-        this.watcher.on("add", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
-        this.watcher.on("addDir", (filePath) => this.emitter.emit("process", () => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
-        this.watcher.on("unlink", (filePath) => this.emitter.emit("process", () => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
-        this.watcher.on("unlinkDir", (filePath) => this.emitter.emit("process", () => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
-        this.watcher.on("change", filePath => this.emitter.emit("process", () => this.onChange(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
+        this.watcher.on("add", (filePath) => this.enqueue(() => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
+        this.watcher.on("addDir", (filePath) => this.enqueue(() => this.onNewFile(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
+        this.watcher.on("unlink", (filePath) => this.enqueue(() => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
+        this.watcher.on("unlinkDir", (filePath) => this.enqueue(() => this.onDel(filePath.replace(`${process.env.ROUTE}`, ""), "borrado")));
+        this.watcher.on("change", filePath => this.enqueue(() => this.onChange(filePath.replace(`${process.env.ROUTE}`, ""), "creado")));
 
-        this.emitter.on("process", async (task: ()=> Promise<void>) =>{
-            this.eventChain = this.eventChain.then(() => task()).catch(console.error);
-        })
+        this.emitter.on("process", async (task: ()=> Promise<any>) =>{
+            //this.eventChain = this.eventChain.then(() => task()).catch(console.error);
+            this.threadQueue.push(task);
+            this.processQueue();
+        });
+    }
+
+    private enqueue(task: ()=> Promise<any>){
+        this.threadQueue.push(task);
+        this.processQueue();
+    }
+
+    private processQueue(){
+        if(this.activeThreadCount > this.maxThreads || this.threadQueue.length == 0) return;
+
+        const task = this.threadQueue.shift();
+        if(!task) return;
+
+        this.activeThreadCount++;
+        task()
+            .catch(console.error)
+            .finally(()=>{
+                this.activeThreadCount--;
+                this.processQueue();
+            });
+
+        this.processQueue();
     }
 
     async onNewFile(filePath: string, eventType: string){
@@ -69,7 +97,7 @@ export class FileTraceService implements OnModuleInit{
     }
 
 
-    onChange(filePath: string, eventType: string){
+    async onChange(filePath: string, eventType: string){
         fs.stat(`${process.env.ROUTE}/${filePath}`, async (err, stat)=>{
             filePath = filePath;
             
