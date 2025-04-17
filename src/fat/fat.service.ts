@@ -13,7 +13,7 @@ export class FatService implements OnModuleInit{
     ){}
 
     async onModuleInit() {
-        await this.fatRepository.query('UPDATE public.fat SET "totalSize" = 0');
+        await this.fatRepository.query('UPDATE fat SET "totalSize" = 0');
         console.log("✅ TotalSize reseteado al iniciar el módulo");
     }
 

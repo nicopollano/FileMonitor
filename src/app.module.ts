@@ -14,13 +14,10 @@ import { Fat } from './fat/entities/fat.entity';
     TypeOrmModule.forRootAsync({
       imports:[ConfigModule],
       useFactory: (configService:ConfigService) => ({
-        type: "postgres",
-        host: "localhost",
-        port: 5432,
-        username: "postgres",
-        password: "postgres",
-        database: "filetrace",
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        type: "sqlite",
+        database: process.env.DB_NAME,
+        entities: [Fat],
+        logging: false,
         synchronize: true
       }),
       inject: [ConfigService]

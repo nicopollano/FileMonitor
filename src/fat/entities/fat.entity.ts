@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
-@Entity()
+@Entity('fat')
 export class Fat {
     @PrimaryGeneratedColumn()
     id: number;
